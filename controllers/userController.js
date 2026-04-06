@@ -43,4 +43,52 @@ const getAllUsers = async (req, res) => {
   }
 };
 
-module.exports = { getAllUsers };
+/* ── Update the logged-in user's profile ────────────────────────────────────── */
+
+/**
+ * updateProfile
+ * Body: { username?, profilePic? }
+ *
+ * Allows the authenticated user to update their display name and avatar URL.
+ * Returns the updated safe user object.
+ */
+const updateProfile = async (req, res) => {
+  try {
+    const { username, profilePic } = req.body;
+
+    const updates = {};
+
+    if (username !== undefined) {
+      const trimmed = String(username).trim();
+      if (!trimmed) {
+        return res.status(400).json({ error: "Username cannot be empty." });
+      }
+      updates.username = trimmed;
+    }
+
+    if (profilePic !== undefined) {
+      updates.profilePic = String(profilePic).trim();
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "No fields to update." });
+    }
+
+    const updated = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: updates },
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    if (!updated) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    return res.status(200).json(updated.toSafeObject());
+  } catch (error) {
+    console.error("[updateProfile] Error:", error.message);
+    return res.status(500).json({ error: "Server error while updating profile." });
+  }
+};
+
+module.exports = { getAllUsers, updateProfile };
