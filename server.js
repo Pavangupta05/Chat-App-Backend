@@ -124,6 +124,58 @@ app.get("/health", (_req, res) => {
   });
 });
 
+// ── 7.5 Root endpoint ─────────────────────────────────────────────────────────
+app.get("/", (_req, res) => {
+  res.status(200).send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Chat App Backend</title>
+      <style>
+        body {
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          height: 100vh;
+          margin: 0;
+          background-color: #f0f2f5;
+          color: #333;
+        }
+        .container {
+          text-align: center;
+          background: white;
+          padding: 2rem 3rem;
+          border-radius: 12px;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        h1 { color: #2ecc71; margin-bottom: 0.5rem; }
+        p { color: #666; font-size: 1.1rem; }
+        .status {
+          display: inline-block;
+          margin-top: 1rem;
+          padding: 0.5rem 1rem;
+          background-color: #e8f8f5;
+          color: #1abc9c;
+          border-radius: 20px;
+          font-weight: 500;
+          font-size: 0.9rem;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>Backend is running 🚀</h1>
+        <p>The Chat Application API is live and accepting requests.</p>
+        <div class="status">● System status: Optimal</div>
+      </div>
+    </body>
+    </html>
+  `);
+});
+
 // ── 8. 404 fallback ───
 app.use((_req, res) => {
   res.status(404).json({ error: "Route not found." });
