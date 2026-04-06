@@ -100,12 +100,40 @@ function initSocket(io) {
     // Track socket → user mapping
     addUserSocket(userId, socket.id);
 
+    // Broadcast online status to ALL connected sockets (presence)
+    // Only broadcast on first socket connection for this user
+    if (userSocketMap.get(userId)?.size === 1) {
+      io.emit("user_online", { userId });
+      // Update DB last seen
+      User.findByIdAndUpdate(userId, { isOnline: true }).catch(() => {});
+    }
+
     /* ── join_chat ────────────────────────────────────────────────────── */
     socket.on("join_chat", (chatId) => {
       if (chatId) {
         socket.join(String(chatId));
         console.log(`   ↳ ${username} joined room: ${chatId}`);
       }
+    });
+
+    /* ── message_delivered ────────────────────────────────────────────── */
+    socket.on("message_delivered", (payload) => {
+      if (!payload?.targetUserId || !payload?.messageId) return;
+      emitToUser(io, String(payload.targetUserId), "message_delivered", {
+        chatId:    payload.threadPeerId ?? userId,
+        messageId: payload.messageId,
+        status:    "delivered",
+      });
+    });
+
+    /* ── message_seen ─────────────────────────────────────────────────── */
+    socket.on("message_seen", (payload) => {
+      if (!payload?.targetUserId || !payload?.messageId) return;
+      emitToUser(io, String(payload.targetUserId), "message_seen", {
+        chatId:    payload.threadPeerId ?? userId,
+        messageId: payload.messageId,
+        status:    "seen",
+      });
     });
 
     /* ── send_message ─────────────────────────────────────────────────── */
@@ -257,14 +285,11 @@ function initSocket(io) {
     });
 
     /* ── typing_start ─────────────────────────────────────────────────── */
-    /**
-     * Payload: { chatId, username }
-     * Broadcasts typing indicator to the target user
-     */
     socket.on("typing_start", (payload) => {
       if (!payload?.chatId) return;
+      // relay to the peer using their userId (chatId IS the peer's userId)
       emitToUser(io, String(payload.chatId), "typing_update", {
-        chatId:   userId, // Set chatId to sender so receiver maps it correctly
+        chatId:   userId,
         username: payload.username ?? username,
         isTyping: true,
       });
@@ -274,7 +299,7 @@ function initSocket(io) {
     socket.on("typing_stop", (payload) => {
       if (!payload?.chatId) return;
       emitToUser(io, String(payload.chatId), "typing_update", {
-        chatId:   userId, // Set chatId to sender so receiver maps it correctly
+        chatId:   userId,
         username: payload.username ?? username,
         isTyping: false,
       });
@@ -317,7 +342,8 @@ function initSocket(io) {
       emitToUser(io, targetUserId, "incoming_call", {
         ...payload, 
         callerSocketId: socket.id,
-        chatId: outgoingChatId
+        chatId: outgoingChatId,
+        receiverUserId: targetUserId // <--- FIX: Ensure frontend bypasses ID filter
       });
     });
 
@@ -331,13 +357,24 @@ function initSocket(io) {
 
     socket.on("end_call", (payload) => {
       // Broadcast end_call to the peer so they hang up
-      emitToUser(io, String(payload?.receiverUserId ?? ""), "end_call", payload);
+      const targetUserId = String(payload?.receiverUserId ?? "");
+      emitToUser(io, targetUserId, "end_call", {
+        ...payload,
+        receiverUserId: targetUserId 
+      });
     });
 
     /* ── Disconnect ───────────────────────────────────────────────────── */
     socket.on("disconnect", (reason) => {
       console.log(`🔌 [Socket] Disconnected — ${username} (${userId}) reason: ${reason}`);
       removeUserSocket(userId, socket.id);
+
+      // Broadcast offline + update lastSeen when ALL sockets for user are gone
+      if (!userSocketMap.has(userId)) {
+        const lastSeen = new Date();
+        io.emit("user_offline", { userId, lastSeen });
+        User.findByIdAndUpdate(userId, { isOnline: false, lastSeen }).catch(() => {});
+      }
     });
   });
 }
