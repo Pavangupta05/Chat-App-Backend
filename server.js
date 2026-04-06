@@ -55,6 +55,7 @@ const allowedOrigins = [
   "http://127.0.0.1:3000",
   "http://127.0.0.1:5173",
   "https://chat-app-frontend-eqb345dra-pavan-kumar-gupta-s-projects.vercel.app",
+  "https://chat-app-frontend-kappa-tan.vercel.app",
 ];
 
 app.use(
