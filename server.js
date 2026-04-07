@@ -171,6 +171,24 @@ app.use((error, req, res, next) => {
 
 app.use("/uploads", express.static(uploadDir));
 
+// Error handling middleware for multer
+app.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({ error: "File is too large. Maximum size is 5MB." });
+    }
+    return res.status(400).json({ error: `Upload error: ${error.message}` });
+  }
+
+  if (error && error.message && error.message.includes("not allowed")) {
+    return res.status(415).json({ error: "File type not supported." });
+  }
+
+  next(error);
+});
+
+app.use("/uploads", express.static(uploadDir));
+
 // ── 7. Health-check endpoint ──────────────────────────────────────────────────
 app.get("/health", (_req, res) => {
   res.status(200).json({

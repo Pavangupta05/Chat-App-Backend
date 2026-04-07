@@ -1,11 +1,12 @@
 /**
  * controllers/messageController.js
- * Handles sending and fetching messages.
+ * Handles sending, fetching, and deleting messages.
  *
  * Routes consumed:
- *   POST /api/messages          → sendMessage
- *   GET  /api/messages          → getMessagesBetweenUsers  (?withUserId=<id>)
- *   GET  /api/messages/:chatId  → getMessagesForChat
+ *   POST /api/messages              → sendMessage
+ *   GET  /api/messages              → getMessagesBetweenUsers  (?withUserId=<id>)
+ *   GET  /api/messages/:chatId      → getMessagesForChat
+ *   DELETE /api/messages/:chatId    → clearChatHistory
  */
 
 const Chat    = require("../models/Chat");
@@ -208,4 +209,47 @@ const getMessagesForChat = async (req, res) => {
   }
 };
 
-module.exports = { sendMessage, getMessagesBetweenUsers, getMessagesForChat };
+/* ── Clear all messages from a chat ─────────────────────────────────────────── */
+
+/**
+ * clearChatHistory
+ * Params: :chatId
+ *
+ * • Verifies the user is a participant in the chat
+ * • Deletes all messages associated with the chat
+ * • Updates Chat.latestMessage to null
+ * • Returns success message
+ */
+const clearChatHistory = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(chatId)) {
+      return res.status(400).json({ error: "Invalid chatId." });
+    }
+
+    // Verify the user is a participant
+    const chat = await Chat.findOne({
+      _id:          chatId,
+      participants: { $in: [req.user._id] },
+    });
+
+    if (!chat) {
+      return res.status(404).json({ error: "Chat not found or you are not a participant." });
+    }
+
+    // Delete all messages in this chat
+    await Message.deleteMany({ chatId: chat._id });
+
+    // Clear the latest message for this chat
+    await Chat.findByIdAndUpdate(chat._id, { latestMessage: null });
+
+    console.log("[clearChatHistory] Chat history cleared:", chatId);
+    return res.status(200).json({ message: "Chat history cleared successfully." });
+  } catch (error) {
+    console.error("[clearChatHistory] Error:", error.message);
+    return res.status(500).json({ error: "Server error while clearing chat history." });
+  }
+};
+
+module.exports = { sendMessage, getMessagesBetweenUsers, getMessagesForChat, clearChatHistory };

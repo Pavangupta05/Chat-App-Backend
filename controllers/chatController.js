@@ -1,10 +1,11 @@
 /**
  * controllers/chatController.js
- * Manages one-to-one chat creation and retrieval.
+ * Manages one-to-one chat creation, retrieval, and deletion.
  *
  * Routes consumed:
  *   POST /api/chat       → accessOrCreateChat (create or fetch a DM)
  *   GET  /api/chat       → getUserChats       (all chats for the current user)
+ *   DELETE /api/chat/:chatId → deleteChat   (delete a chat and its messages)
  */
 
 const Chat    = require("../models/Chat");
@@ -79,4 +80,47 @@ const getUserChats = async (req, res) => {
   }
 };
 
-module.exports = { accessOrCreateChat, getUserChats };
+/* ── Delete a chat ──────────────────────────────────────────────────────────── */
+
+/**
+ * deleteChat
+ * Params: :chatId
+ *
+ * • Verifies the user is a participant in the chat
+ * • Deletes all messages associated with the chat
+ * • Deletes the chat itself
+ * • Returns success message
+ */
+const deleteChat = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+
+    if (!chatId) {
+      return res.status(400).json({ error: "chatId is required." });
+    }
+
+    // Verify the user is a participant
+    const chat = await Chat.findOne({
+      _id:          chatId,
+      participants: { $in: [req.user._id] },
+    });
+
+    if (!chat) {
+      return res.status(404).json({ error: "Chat not found or you are not a participant." });
+    }
+
+    // Delete all messages in this chat
+    await Message.deleteMany({ chatId: chat._id });
+
+    // Delete the chat
+    await Chat.findByIdAndDelete(chat._id);
+
+    console.log("[deleteChat] Chat deleted successfully:", chatId);
+    return res.status(200).json({ message: "Chat deleted successfully." });
+  } catch (error) {
+    console.error("[deleteChat] Error:", error.message);
+    return res.status(500).json({ error: "Server error while deleting chat." });
+  }
+};
+
+module.exports = { accessOrCreateChat, getUserChats, deleteChat };
