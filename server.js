@@ -99,20 +99,74 @@ const storage = multer.diskStorage({
     cb(null, uniqueSuffix + path.extname(file.originalname));
   },
 });
-const upload = multer({ storage });
 
+// Configure multer with file size limit (5MB)
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB max
+  },
+  fileFilter: function (req, file, cb) {
+    // Allow common file types: images, documents, etc.
+    const allowedMimes = [
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+      "application/pdf",
+      "text/plain",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ];
+
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`File type ${file.mimetype} not allowed`), false);
+    }
+  },
+});
+
+// Upload endpoint with enhanced error handling
 app.post("/upload", upload.single("file"), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "Please select a file first." });
   }
 
-  const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-  res.status(200).json({
-    fileUrl,
-    fileName: req.file.originalname,
-    mimeType: req.file.mimetype,
-    size: req.file.size,
-  });
+  try {
+    const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+    console.log("[UPLOAD] File uploaded successfully", {
+      filename: req.file.filename,
+      size: req.file.size,
+      mimetype: req.file.mimetype,
+    });
+
+    res.status(200).json({
+      fileUrl,
+      fileName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+    });
+  } catch (error) {
+    console.error("[UPLOAD] Error processing upload:", error);
+    res.status(500).json({ error: "Failed to process file upload." });
+  }
+});
+
+// Error handling middleware for multer
+app.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({ error: "File is too large. Maximum size is 5MB." });
+    }
+    return res.status(400).json({ error: `Upload error: ${error.message}` });
+  }
+
+  if (error && error.message && error.message.includes("not allowed")) {
+    return res.status(415).json({ error: "File type not supported." });
+  }
+
+  next(error);
 });
 
 app.use("/uploads", express.static(uploadDir));
