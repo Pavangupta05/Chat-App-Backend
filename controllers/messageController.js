@@ -28,10 +28,7 @@ function formatMessage(msg, requestingUserId) {
     ? msg.senderId._id.toString() === requestingUserId
     : msg.senderId?.toString() === requestingUserId;
 
-  const time = new Date(msg.createdAt).toLocaleTimeString("en-US", {
-    hour:   "2-digit",
-    minute: "2-digit",
-  });
+  const time = msg.createdAt;
 
   return {
     id:          msg._id.toString(),

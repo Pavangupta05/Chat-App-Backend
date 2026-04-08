@@ -36,6 +36,9 @@ const generateToken = (id) => {
 const registerUser = async (req, res) => {
   try {
     const { username, email, password } = req.body;
+    const sanitizedEmail = email?.toLowerCase().trim();
+
+    console.log(`[AUTH] Registering: email="${sanitizedEmail}", passLen=${password?.length}`);
 
     // Basic validation
     if (!username || !email || !password) {
@@ -43,17 +46,20 @@ const registerUser = async (req, res) => {
     }
 
     // Check for duplicate email
-    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+    const existingUser = await User.findOne({ email: sanitizedEmail });
     if (existingUser) {
+      console.warn(`[AUTH] Registration failed: email "${sanitizedEmail}" already exists.`);
       return res.status(409).json({ error: "An account with this email already exists." });
     }
 
     // Create user (password hashing handled by pre-save middleware)
     const user = await User.create({
       username: username.trim(),
-      email:    email.toLowerCase().trim(),
+      email:    sanitizedEmail,
       password,
     });
+
+    console.log(`[AUTH] User created successfully: ${user._id}`);
 
     return res.status(201).json({
       message: "Account created successfully. You can now log in.",
@@ -67,31 +73,28 @@ const registerUser = async (req, res) => {
 
 /* ── Login ──────────────────────────────────────────────────────────────────── */
 
-/**
- * loginUser
- * Body: { email, password }
- *
- * • Validates required fields
- * • Finds user by email
- * • Compares password using bcrypt
- * • Returns user + JWT token on success
- */
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
+    const sanitizedEmail = email?.toLowerCase().trim();
+
+    console.log(`[AUTH] Login attempt: email="${sanitizedEmail}", passLen=${password?.length}`);
 
     if (!email || !password) {
       return res.status(400).json({ error: "Please provide email and password." });
     }
 
     // Find user by email
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    const user = await User.findOne({ email: sanitizedEmail });
     if (!user) {
+      console.warn(`[AUTH] Login failed: No user found with email "${sanitizedEmail}"`);
       return res.status(401).json({ error: "Invalid email or password." });
     }
 
     // Compare passwords
     const isMatch = await user.matchPassword(password);
+    console.log(`[AUTH] Password match for "${sanitizedEmail}": ${isMatch}`);
+
     if (!isMatch) {
       return res.status(401).json({ error: "Invalid email or password." });
     }
