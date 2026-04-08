@@ -134,7 +134,7 @@ app.post("/upload", upload.single("file"), (req, res) => {
   }
 
   try {
-    const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+    const fileUrl = `/uploads/${req.file.filename}`;
     console.log("[UPLOAD] File uploaded successfully", {
       filename: req.file.filename,
       size: req.file.size,

@@ -18,10 +18,11 @@
  *   The middleware verifies the JWT and attaches socket.user.
  */
 
-const jwt     = require("jsonwebtoken");
-const User    = require("../models/User");
-const Message = require("../models/Message");
-const Chat    = require("../models/Chat");
+const jwt      = require("jsonwebtoken");
+const mongoose = require("mongoose");
+const User     = require("../models/User");
+const Message  = require("../models/Message");
+const Chat     = require("../models/Chat");
 
 /**
  * userSocketMap — maps userId (string) → Set of socketIds.
@@ -147,7 +148,7 @@ function initSocket(io) {
      *
      * receiverId = the peer's MongoDB _id (same as chatId for DMs)
      */
-    socket.on("send_message", async (payload) => {
+    socket.on("send_message", async (payload, callback) => {
       try {
         if (!payload?.receiverId) return;
 
@@ -189,6 +190,14 @@ function initSocket(io) {
 
           // Keep Chat.latestMessage updated for sidebar preview
           await Chat.findByIdAndUpdate(dbChatId, { latestMessage: dbMessage._id });
+
+          // Return the real ID to the sender via acknowledgement
+          if (typeof callback === "function") {
+            callback({
+              status: "ok",
+              id: dbMessage._id.toString(),
+            });
+          }
         }
 
         // ── Build the outgoing socket payload ───────────────────────────
@@ -259,6 +268,12 @@ function initSocket(io) {
     socket.on("delete_message", async (payload) => {
       try {
         if (!payload?.messageId) return;
+
+        // CRITICAL: Validate the messageId is a valid MongoDB ObjectId
+        if (!mongoose.Types.ObjectId.isValid(payload.messageId)) {
+          console.warn(`[Socket] Ignored delete_message with invalid ID: ${payload.messageId}`);
+          return;
+        }
 
         // Soft-delete in the database
         await Message.findByIdAndUpdate(payload.messageId, {
