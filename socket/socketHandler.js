@@ -379,6 +379,19 @@ function initSocket(io) {
       });
     });
 
+    /* ── profile_updated ──────────────────────────────────────────────── */
+    /**
+     * Payload: { userId, username, profilePic }
+     * 
+     * Broadcasts profile changes to ALL connected clients so their 
+     * sidebars/chats update in real-time.
+     */
+    socket.on("profile_updated", (payload) => {
+      if (!payload?.userId) return;
+      console.log(`👤 [Socket] Profile updated — ${payload.username} (${payload.userId})`);
+      io.emit("user_updated", payload);
+    });
+
     /* ── Disconnect ───────────────────────────────────────────────────── */
     socket.on("disconnect", (reason) => {
       console.log(`🔌 [Socket] Disconnected — ${username} (${userId}) reason: ${reason}`);
