@@ -60,25 +60,8 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. Postman, curl)
-      if (!origin) return callback(null, true);
-      
-      const isAllowed = allowedOrigins.some(pattern => {
-        if (pattern instanceof RegExp) {
-          return pattern.test(origin);
-        }
-        return pattern === origin;
-      });
-
-      if (isAllowed) {
-        callback(null, true);
-      } else {
-        console.warn(`[CORS] Rejected origin: ${origin}`);
-        callback(new Error(`CORS: origin ${origin} is not allowed.`));
-      }
-    },
-    methods:     ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    origin: true, // Allow all origins by reflecting the request origin
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
   })
 );
