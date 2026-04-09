@@ -377,6 +377,15 @@ function initSocket(io) {
         ...payload,
         receiverUserId: targetUserId 
       });
+      // Also emit "callEnded" as requested by user
+      emitToUser(io, targetUserId, "callEnded", { from: userId });
+    });
+
+    socket.on("callEnded", (payload) => {
+      const targetUserId = String(payload?.to ?? "");
+      emitToUser(io, targetUserId, "callEnded", { from: userId });
+      // Keep end_call for backward compatibility if needed
+      emitToUser(io, targetUserId, "end_call", { receiverUserId: targetUserId });
     });
 
     /* ── profile_updated ──────────────────────────────────────────────── */
@@ -389,6 +398,13 @@ function initSocket(io) {
     socket.on("profile_updated", (payload) => {
       if (!payload?.userId) return;
       console.log(`👤 [Socket] Profile updated — ${payload.username} (${payload.userId})`);
+      io.emit("user_updated", payload);
+      io.emit("profileUpdated", payload); // Add alias as requested
+    });
+
+    socket.on("profileUpdated", (payload) => {
+      if (!payload?.userId) return;
+      io.emit("profileUpdated", payload);
       io.emit("user_updated", payload);
     });
 
