@@ -72,11 +72,19 @@ const sendMessage = async (req, res) => {
       return res.status(400).json({ error: "chatId is required." });
     }
 
-    // Validate the chat and membership
-    const chat = await Chat.findOne({
+    // 1. Resolve the chat using Smart Resolution
+    let chat = await Chat.findOne({
       _id:          chatId,
       participants: { $in: [req.user._id] },
     });
+
+    // If not found by ID, it might be a newly created chat where we only have the Peer User ID
+    if (!chat) {
+      console.log(`[SmartResolution] Saving message: Chat ${chatId} not found by ID. Checking if it's a Peer User ID...`);
+      chat = await Chat.findOne({
+        participants: { $all: [req.user._id, chatId] }
+      });
+    }
 
     if (!chat) {
       return res
@@ -179,16 +187,27 @@ const getMessagesForChat = async (req, res) => {
       return res.status(400).json({ error: "Invalid chatId." });
     }
 
-    // Verify the user is a participant
-    const chat = await Chat.findOne({
-      _id:          chatId,
-      participants: { $in: [req.user._id] },
-    });
+    // 1. First, try to find the chat by its primary ID
+    let chat = await Chat.findById(chatId);
+
+    // 2. SMART RESOLUTION: If not found by ID, it might be a newly created chat 
+    // where the frontend only has the Peer User ID.
+    if (!chat) {
+      console.log(`[SmartResolution] Chat ${chatId} not found by ID. Checking if it's a Peer User ID...`);
+      chat = await Chat.findOne({
+        participants: { $all: [req.user._id, chatId] }
+      });
+    }
 
     if (!chat) {
-      return res
-        .status(404)
-        .json({ error: "Chat not found or you are not a participant." });
+      return res.status(404).json({ error: "Chat not found or you are not a participant." });
+    }
+
+    // 3. Verify the requesting user is a participant (extra safety check)
+    const isParticipant = chat.participants.some(p => String(p) === String(req.user._id));
+
+    if (!isParticipant) {
+      return res.status(403).json({ error: "Access denied. You are not a participant in this chat." });
     }
 
     const messages = await Message.find({ chatId: chat._id })

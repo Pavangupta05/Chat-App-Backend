@@ -99,14 +99,25 @@ const deleteChat = async (req, res) => {
       return res.status(400).json({ error: "chatId is required." });
     }
 
-    // Verify the user is a participant
-    const chat = await Chat.findOne({
-      _id:          chatId,
-      participants: { $in: [req.user._id] },
-    });
+    // 1. First, try to find the chat by its primary ID
+    let chat = await Chat.findById(chatId);
+
+    // 2. SMART RESOLUTION: If not found by ID, check if it's a Peer User ID
+    if (!chat) {
+      console.log(`[SmartResolution] Delete requested for ${chatId} (Chat ID not found). Checking if it's a User ID...`);
+      chat = await Chat.findOne({
+        participants: { $all: [req.user._id, chatId] }
+      });
+    }
 
     if (!chat) {
       return res.status(404).json({ error: "Chat not found or you are not a participant." });
+    }
+
+    // 3. Extra safety: Verify the user is actually a participant
+    const isParticipant = chat.participants.some(p => String(p) === String(req.user._id));
+    if (!isParticipant) {
+      return res.status(403).json({ error: "Access denied. You are not a participant in this chat." });
     }
 
     // Delete all messages in this chat
