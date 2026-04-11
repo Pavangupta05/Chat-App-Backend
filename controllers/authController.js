@@ -8,7 +8,10 @@
  */
 
 const jwt  = require("jsonwebtoken");
+const { OAuth2Client } = require("google-auth-library");
 const User = require("../models/User");
+
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 /* ── Helpers ───────────────────────────────────────────────────────────────── */
 
@@ -111,4 +114,60 @@ const loginUser = async (req, res) => {
   }
 };
 
-module.exports = { registerUser, loginUser };
+/* ── Google Login ───────────────────────────────────────────────────────────── */
+
+/**
+ * googleLogin
+ * Body: { token } (Google ID Token)
+ */
+const googleLogin = async (req, res) => {
+  try {
+    const { token: googleIdToken } = req.body;
+
+    if (!googleIdToken) {
+      return res.status(400).json({ error: "No Google token provided." });
+    }
+
+    // 1. Verify token
+    const ticket = await client.verifyIdToken({
+      idToken:  googleIdToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { email, name, picture, sub: googleId } = payload;
+    const sanitizedEmail = email.toLowerCase().trim();
+
+    console.log(`[AUTH] Google Login: email="${sanitizedEmail}", name="${name}"`);
+
+    // 2. Find or create user
+    let user = await User.findOne({ email: sanitizedEmail });
+
+    if (!user) {
+      console.log(`[AUTH] Creating new user via Google: ${sanitizedEmail}`);
+      user = await User.create({
+        username:   name || "Google User",
+        email:      sanitizedEmail,
+        profilePic: picture || "",
+        // password is omitted for Google users (optional in schema now)
+      });
+    }
+
+    // 3. Generate internal JWT (7-day expiry for Google as requested)
+    const token = jwt.sign(
+      { id: user._id.toString() },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    return res.status(200).json({
+      token,
+      user: user.toSafeObject(),
+    });
+  } catch (error) {
+    console.error("[googleLogin] Error:", error.message);
+    return res.status(500).json({ error: "Google authentication failed." });
+  }
+};
+
+module.exports = { registerUser, loginUser, googleLogin };

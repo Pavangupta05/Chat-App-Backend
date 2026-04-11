@@ -10,12 +10,13 @@
 
 const express = require("express");
 const router  = express.Router();
-const { registerUser, loginUser } = require("../controllers/authController");
+const { registerUser, loginUser, googleLogin } = require("../controllers/authController");
 const { forgotPassword, resetPassword } = require("../controllers/passwordResetController");
 
 // ── Existing routes (unchanged) ────────────────────────────────────────────────
 router.post("/register", registerUser);
 router.post("/login",    loginUser);
+router.post("/google",   googleLogin);
 
 // ── Password reset routes (no JWT needed) ─────────────────────────────────────
 router.post("/forgot-password",        forgotPassword);
