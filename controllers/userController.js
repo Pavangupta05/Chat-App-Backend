@@ -29,9 +29,11 @@ const getAllUsers = async (req, res) => {
 
     // If a search term is provided, do a case-insensitive regex on name or email
     if (searchTerm) {
+      // Escape special regex chars to prevent ReDoS attacks
+      const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       query.$or = [
-        { username: { $regex: searchTerm, $options: "i" } },
-        { email:    { $regex: searchTerm, $options: "i" } },
+        { username: { $regex: escaped, $options: "i" } },
+        { email:    { $regex: escaped, $options: "i" } },
       ];
     }
 
@@ -109,34 +111,37 @@ const deleteUser = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    // Delete all messages sent by this user
-    await Message.deleteMany({ senderId: userId });
-
-    // Find all chats user is part of
+    // Step 1: Find all chats user is part of
     const chats = await Chat.find({ participants: { $in: [userId] } });
+    const chatIdsToDelete = [];
 
-    // For each chat:
-    // - Remove user from participants
-    // - If no participants left, delete the chat
+    // Step 2: For each chat, remove user or delete entire chat if they were the only participant
     for (const chat of chats) {
       const remainingParticipants = chat.participants.filter(
         (p) => p.toString() !== userId.toString()
       );
 
       if (remainingParticipants.length === 0) {
-        // Delete chat if user was the only participant
+        // No other participants — queue entire chat for deletion
+        chatIdsToDelete.push(chat._id);
         await Chat.findByIdAndDelete(chat._id);
-        // Also delete all messages in this chat
-        await Message.deleteMany({ chatId: chat._id });
       } else {
-        // Update chat to remove this user
+        // Peer chat — just remove this user from participants
         await Chat.findByIdAndUpdate(chat._id, {
           participants: remainingParticipants,
         });
       }
     }
 
-    // Delete the user account
+    // Step 3: Delete ALL messages in orphaned chats (sent by anyone in those chats)
+    if (chatIdsToDelete.length > 0) {
+      await Message.deleteMany({ chatId: { $in: chatIdsToDelete } });
+    }
+
+    // Step 4: Delete only this user's own messages in remaining (peer) chats
+    await Message.deleteMany({ senderId: userId });
+
+    // Step 5: Delete the user account
     await User.findByIdAndDelete(userId);
 
     console.log("[deleteUser] User deleted successfully:", userId);

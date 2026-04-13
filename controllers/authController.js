@@ -64,8 +64,11 @@ const registerUser = async (req, res) => {
 
     console.log(`[AUTH] User created successfully: ${user._id}`);
 
+    const token = generateToken(user._id.toString());
+
     return res.status(201).json({
       message: "Account created successfully. You can now log in.",
+      token,
       user:    user.toSafeObject(),
     });
   } catch (error) {

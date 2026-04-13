@@ -69,4 +69,10 @@ const messageSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+/* ── Performance indexes ─────────────────────────────────────────────────── */
+// Frequently queried: all messages for a chat, ordered by time
+messageSchema.index({ chatId: 1, createdAt: 1 });
+// For sender-based lookups (deleteUser, etc.)
+messageSchema.index({ senderId: 1 });
+
 module.exports = mongoose.model("Message", messageSchema);

@@ -27,6 +27,7 @@ const { Server } = require("socket.io");
 const multer  = require("multer");
 const fs      = require("fs");
 const path    = require("path");
+const rateLimit = require("express-rate-limit");
 
 // ── 3. Internal imports ───────────────────────────────────────────────────────
 const connectDB       = require("./config/db");
@@ -60,7 +61,15 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: true, // Allow all origins by reflecting the request origin
+    origin: (origin, callback) => {
+      // Allow server-to-server (no origin) and whitelisted origins
+      if (!origin) return callback(null, true);
+      const allowed = allowedOrigins.some((o) =>
+        typeof o === "string" ? o === origin : o.test(origin)
+      );
+      if (allowed) callback(null, true);
+      else callback(new Error(`CORS: origin '${origin}' not allowed`));
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
   })
@@ -72,10 +81,18 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // ── 6. API Routes ─────────────────────────────────────────────────────────────
-app.use("/api/auth",     authRoutes);      // POST /api/auth/register | /api/auth/login
-app.use("/api/users",    userRoutes);      // GET  /api/users
-app.use("/api/chat",     chatRoutes);      // POST /api/chat | GET /api/chat
-app.use("/api/messages", messageRoutes);   // POST /api/messages | GET /api/messages | GET /api/messages/:chatId
+// Rate limiter for auth endpoints — prevents brute-force attacks
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,                   // max 20 requests per window per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please try again in 15 minutes." },
+});
+app.use("/api/auth",     authLimiter, authRoutes); // POST /api/auth/register | /api/auth/login
+app.use("/api/users",    userRoutes);              // GET  /api/users
+app.use("/api/chat",     chatRoutes);              // POST /api/chat | GET /api/chat
+app.use("/api/messages", messageRoutes);           // POST /api/messages | GET /api/messages | GET /api/messages/:chatId
 
 // ── 6.5 File Uploads ──────────────────────────────────────────────────────────
 const uploadDir = path.join(__dirname, "uploads");
@@ -121,7 +138,8 @@ const upload = multer({
 });
 
 // Upload endpoint with enhanced error handling
-app.post("/upload", upload.single("file"), (req, res) => {
+const protect = require("./middleware/authMiddleware");
+app.post("/upload", protect, upload.single("file"), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "Please select a file first." });
   }
@@ -162,25 +180,14 @@ app.use((error, req, res, next) => {
   next(error);
 });
 
-app.use("/uploads", express.static(uploadDir));
+app.use("/uploads", express.static(uploadDir, {
+  maxAge: "1d",
+  setHeaders: (res) => {
+    res.set("X-Content-Type-Options", "nosniff");
+    res.set("Content-Security-Policy", "default-src 'none'");
+  },
+}));
 
-// Error handling middleware for multer
-app.use((error, req, res, next) => {
-  if (error instanceof multer.MulterError) {
-    if (error.code === "LIMIT_FILE_SIZE") {
-      return res.status(413).json({ error: "File is too large. Maximum size is 5MB." });
-    }
-    return res.status(400).json({ error: `Upload error: ${error.message}` });
-  }
-
-  if (error && error.message && error.message.includes("not allowed")) {
-    return res.status(415).json({ error: "File type not supported." });
-  }
-
-  next(error);
-});
-
-app.use("/uploads", express.static(uploadDir));
 
 // ── 7. Health-check endpoint ──────────────────────────────────────────────────
 app.get("/health", (_req, res) => {

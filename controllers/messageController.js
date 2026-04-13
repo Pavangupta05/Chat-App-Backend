@@ -144,10 +144,7 @@ const getMessagesBetweenUsers = async (req, res) => {
 
     // Find the exact chat between the two users
     const chat = await Chat.findOne({
-      $or: [
-        { participants: [req.user._id, withUserId] },
-        { participants: [withUserId, req.user._id] },
-      ],
+      participants: { $all: [req.user._id, withUserId] },
     });
 
     if (!chat) {

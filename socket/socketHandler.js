@@ -373,19 +373,20 @@ function initSocket(io) {
     socket.on("end_call", (payload) => {
       // Broadcast end_call to the peer so they hang up
       const targetUserId = String(payload?.receiverUserId ?? "");
-      emitToUser(io, targetUserId, "end_call", {
-        ...payload,
-        receiverUserId: targetUserId 
-      });
-      // Also emit "callEnded" as requested by user
-      emitToUser(io, targetUserId, "callEnded", { from: userId });
+      if (targetUserId) {
+        emitToUser(io, targetUserId, "end_call", {
+          ...payload,
+          receiverUserId: targetUserId,
+        });
+      }
     });
 
     socket.on("callEnded", (payload) => {
+      // Dedicated callEnded event — forward to target without cross-emitting end_call
       const targetUserId = String(payload?.to ?? "");
-      emitToUser(io, targetUserId, "callEnded", { from: userId });
-      // Keep end_call for backward compatibility if needed
-      emitToUser(io, targetUserId, "end_call", { receiverUserId: targetUserId });
+      if (targetUserId) {
+        emitToUser(io, targetUserId, "callEnded", { from: userId });
+      }
     });
 
     /* ── profile_updated ──────────────────────────────────────────────── */
@@ -398,14 +399,15 @@ function initSocket(io) {
     socket.on("profile_updated", (payload) => {
       if (!payload?.userId) return;
       console.log(`👤 [Socket] Profile updated — ${payload.username} (${payload.userId})`);
-      io.emit("user_updated", payload);
-      io.emit("profileUpdated", payload); // Add alias as requested
+      // Broadcast to all OTHER connected clients (not back to the sender)
+      socket.broadcast.emit("user_updated", payload);
+      socket.broadcast.emit("profileUpdated", payload);
     });
 
     socket.on("profileUpdated", (payload) => {
       if (!payload?.userId) return;
-      io.emit("profileUpdated", payload);
-      io.emit("user_updated", payload);
+      socket.broadcast.emit("profileUpdated", payload);
+      socket.broadcast.emit("user_updated", payload);
     });
 
     /* ── Disconnect ───────────────────────────────────────────────────── */
